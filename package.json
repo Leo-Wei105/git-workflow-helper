@@ -2,7 +2,7 @@
   "name": "git-merge-helper",
   "displayName": "Git合并助手",
   "description": "自动化Git分支合并流程的VSCode插件",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "publisher": "Leo-Wei105",
   "repository": {
     "type": "git",
@@ -86,7 +86,7 @@
         },
         "gitMergeHelper.autoDetectMainBranch": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "自动检测主分支（优先级高于手动设置）"
         }
       }
