@@ -108,6 +108,14 @@
         "category": "Git合并助手"
       }
     ],
+    "keybindings": [
+      {
+        "command": "gitMergeHelper.mergeFeatureBranch",
+        "key": "ctrl+alt+shift+m",
+        "mac": "cmd+alt+shift+m",
+        "when": "gitOpenRepositoryCount > 0"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {

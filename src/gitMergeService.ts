@@ -730,6 +730,9 @@ export class MergeWorkflow {
   ): Promise<void> {
     this.showProgress(`开始合并流程，目标分支: ${targetBranch}`);
 
+    // 更新主分支
+    // await this.updateMainBranch(mainBranch);
+
     // 合并主分支到功能分支
     // await this.mergeMainToFeature(currentBranch, mainBranch);
 
@@ -738,9 +741,6 @@ export class MergeWorkflow {
 
     // 切回原分支
     await this.gitOps.checkoutBranch(currentBranch);
-
-    // 更新主分支
-    await this.updateMainBranch(mainBranch);
   }
 
   /**
