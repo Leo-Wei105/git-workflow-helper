@@ -201,23 +201,36 @@ export class BranchManager {
 
   /**
    * 自动检测主分支
+   * 按优先级顺序检测远程仓库中可能的主分支
+   * @returns 检测到的主分支名称,未检测到则返回null
    */
   async autoDetectMainBranch(): Promise<string | null> {
     try {
+      // 获取所有远程分支
       const branches = await this.gitOps.execGitCommand("git branch -r");
-      const remoteBranches = branches.split("\n").map((b) => b.trim());
+      if (!branches) {
+        return null;
+      }
 
+      // 处理远程分支列表
+      const remoteBranches = branches
+        .split("\n")
+        .map((b) => b.trim())
+        .filter(Boolean);
+
+      // 按优先级定义可能的主分支
       const priorityBranches = [
         "origin/master",
         "origin/release",
         "origin/main",
-        "origin/develop",
       ];
 
+      // 遍历优先级分支列表
       for (const branch of priorityBranches) {
-        if (remoteBranches.some((rb) => rb.includes(branch))) {
-          const branchName = branch.replace("origin/", "");
-
+        const matchedBranch = remoteBranches.find((rb) => rb === branch);
+        if (matchedBranch) {
+          const branchName = matchedBranch.replace("origin/", "");
+          // 确认远程分支确实存在
           if (await this.gitOps.checkRemoteBranchExists(branchName)) {
             return branchName;
           }
@@ -226,6 +239,7 @@ export class BranchManager {
 
       return null;
     } catch (error) {
+      console.error("自动检测主分支失败:", error);
       return null;
     }
   }
@@ -342,7 +356,7 @@ export class ConfigurationManager {
         }
 
         vscode.window.showWarningMessage(
-          "未找到标准的主分支(master/release/main/develop)，请手动配置主分支"
+          "未找到标准的主分支(master/release/main)，请手动配置主分支"
         );
       } catch (error) {
         console.warn("自动检测主分支失败，使用配置的分支:", error);
@@ -1191,11 +1205,6 @@ export class GitMergeService {
         label: "release",
         value: "release",
         picked: currentMainBranch === "release",
-      },
-      {
-        label: "develop",
-        value: "develop",
-        picked: currentMainBranch === "develop",
       },
       { label: "自定义", value: "custom" },
     ];

@@ -8,5 +8,6 @@
     "out": false,
     "node_modules": true
   },
-  "gitMergeHelper.autoDetectMainBranch": false
+  "gitMergeHelper.autoDetectMainBranch": true,
+  "gitMergeHelper.mainBranch": "main"
 }
