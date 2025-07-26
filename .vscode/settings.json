@@ -9,5 +9,18 @@
     "node_modules": true
   },
   "gitMergeHelper.autoDetectMainBranch": true,
-  "gitMergeHelper.mainBranch": "main"
+  "gitMergeHelper.targetBranches": [
+    {
+      "name": "uat",
+      "description": "测试环境"
+    },
+    {
+      "name": "pre",
+      "description": "预发布环境"
+    },
+    {
+      "name": "main",
+      "description": "主分支"
+    }
+  ]
 }
