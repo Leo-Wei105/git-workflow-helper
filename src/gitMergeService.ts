@@ -108,10 +108,16 @@ export class GitOperations {
   }
 
   /**
-   * 推送分支到远程
+   * 推送分支到远程（带上游设置）
    */
-  async pushBranch(branchName: string): Promise<void> {
-    await this.execGitCommand(`git push origin ${branchName}`);
+  async pushBranch(
+    branchName: string,
+    setUpstream: boolean = false
+  ): Promise<void> {
+    const command = setUpstream
+      ? `git push -u origin ${branchName}`
+      : `git push origin ${branchName}`;
+    await this.execGitCommand(command);
   }
 
   /**
@@ -148,6 +154,39 @@ export class GitOperations {
    */
   async abortMerge(): Promise<void> {
     await this.execGitCommand("git merge --abort");
+  }
+
+  /**
+   * 确保分支有正确的上游关联
+   */
+  async ensureBranchUpstream(branchName: string): Promise<void> {
+    try {
+      // 检查当前分支的上游设置
+      const upstream = await this.execGitCommand(
+        `git rev-parse --abbrev-ref ${branchName}@{upstream}`
+      );
+      const expectedUpstream = `origin/${branchName}`;
+
+      // 如果上游不正确，重新设置
+      if (upstream !== expectedUpstream) {
+        await this.execGitCommand(
+          `git branch --set-upstream-to=origin/${branchName} ${branchName}`
+        );
+      }
+    } catch (error) {
+      // 如果没有上游分支，设置它
+      await this.execGitCommand(
+        `git branch --set-upstream-to=origin/${branchName} ${branchName}`
+      );
+    }
+  }
+
+  /**
+   * 安全切换分支（保证上游关联）
+   */
+  async safeCheckoutBranch(branchName: string): Promise<void> {
+    await this.checkoutBranch(branchName);
+    await this.ensureBranchUpstream(branchName);
   }
 }
 
@@ -253,7 +292,7 @@ export class BranchManager {
     conflictHandler: (conflictFiles: string[]) => Promise<boolean>
   ): Promise<boolean> {
     try {
-      await this.gitOps.checkoutBranch(targetBranch);
+      await this.gitOps.safeCheckoutBranch(targetBranch);
       await this.gitOps.pullBranch(targetBranch);
 
       try {
@@ -281,13 +320,17 @@ export class BranchManager {
   }
 
   /**
-   * 确保远程分支存在
+   * 确保远程分支存在并设置正确的上游关联
    */
   async ensureRemoteBranchExists(branchName: string): Promise<void> {
     const exists = await this.gitOps.checkRemoteBranchExists(branchName);
 
     if (!exists) {
-      await this.gitOps.pushBranch(branchName);
+      // 首次推送时设置上游分支
+      await this.gitOps.pushBranch(branchName, true);
+    } else {
+      // 确保本地分支有正确的上游关联
+      await this.gitOps.ensureBranchUpstream(branchName);
     }
   }
 }
@@ -730,17 +773,13 @@ export class MergeWorkflow {
   ): Promise<void> {
     this.showProgress(`开始合并流程，目标分支: ${targetBranch}`);
 
-    // 更新主分支
-    // await this.updateMainBranch(mainBranch);
-
-    // 合并主分支到功能分支
-    // await this.mergeMainToFeature(currentBranch, mainBranch);
-
     // 合并功能分支到目标分支
     await this.mergeFeatureToTarget(currentBranch, targetBranch);
 
-    // 切回原分支
-    await this.gitOps.checkoutBranch(currentBranch);
+    // 切回原分支并确保上游关联正确
+    await this.gitOps.safeCheckoutBranch(currentBranch);
+
+    this.showProgress(`已切回功能分支: ${currentBranch}，上游关联已确保正确`);
   }
 
   /**
