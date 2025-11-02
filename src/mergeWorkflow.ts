@@ -110,11 +110,21 @@ export class MergeWorkflow {
   /**
    * 准备合并环境
    */
-  async prepareMergeEnvironment(): Promise<string> {
+  async prepareMergeEnvironment(
+    progress?: vscode.Progress<{ message?: string; increment?: number }>
+  ): Promise<string> {
+    if (progress) {
+      progress.report({ message: "检查Git仓库状态...", increment: 10 });
+    }
+    
     if (!(await this.gitOps.checkGitRepository())) {
       throw new Error("当前目录不是有效的Git仓库");
     }
 
+    if (progress) {
+      progress.report({ message: "验证当前分支...", increment: 10 });
+    }
+    
     const currentBranch = await this.gitOps.getCurrentBranch();
     const branchPrefixes = this.configManager.getBranchPrefixes();
     const isFeatureBranch = await this.branchManager.checkFeatureBranch(branchPrefixes);
@@ -124,7 +134,16 @@ export class MergeWorkflow {
       throw new Error(`当前分支不是功能分支。支持的分支前缀: ${patterns}`);
     }
 
+    if (progress) {
+      progress.report({ message: "确保远程分支存在...", increment: 10 });
+    }
+    
     await this.branchManager.ensureRemoteBranchExists(currentBranch);
+    
+    if (progress) {
+      progress.report({ message: "检查未提交的更改...", increment: 10 });
+    }
+    
     await this.handleUncommittedChanges(currentBranch);
 
     return currentBranch;
@@ -196,13 +215,18 @@ export class MergeWorkflow {
    */
   async executeMainMergeFlow(
     currentBranch: string,
-    targetBranch: string
+    targetBranch: string,
+    progress: vscode.Progress<{ message?: string; increment?: number }>
   ): Promise<void> {
-    await this.mergeFeatureToTarget(currentBranch, targetBranch);
+    progress.report({ message: `切换到目标分支 ${targetBranch}...`, increment: 20 });
+    await this.mergeFeatureToTarget(currentBranch, targetBranch, progress);
+    
+    progress.report({ message: `切回原分支 ${currentBranch}...`, increment: 20 });
     await this.gitOps.checkoutBranch(currentBranch);
     
     const currentBranchExists = await this.gitOps.checkRemoteBranchExists(currentBranch);
     if (currentBranchExists) {
+      progress.report({ message: `设置上游分支关联...`, increment: 10 });
       await this.gitOps.ensureBranchUpstream(currentBranch);
     }
   }
@@ -212,17 +236,23 @@ export class MergeWorkflow {
    */
   private async mergeFeatureToTarget(
     currentBranch: string,
-    targetBranch: string
+    targetBranch: string,
+    progress: vscode.Progress<{ message?: string; increment?: number }>
   ): Promise<void> {
+    progress.report({ message: `合并 ${currentBranch} 到 ${targetBranch}...`, increment: 30 });
+    
     const success = await this.branchManager.safeMergeBranch(
       targetBranch,
       currentBranch,
-      this.handleMergeConflicts.bind(this)
+      this.handleMergeConflicts.bind(this),
+      progress
     );
 
     if (!success) {
       throw new Error(`合并到 ${targetBranch} 分支失败`);
     }
+    
+    progress.report({ message: `推送合并结果到远程...`, increment: 20 });
   }
 
   /**

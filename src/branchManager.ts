@@ -1,3 +1,4 @@
+import * as vscode from "vscode";
 import { GitOperations } from "./gitOperations";
 import { BranchUtils } from "./branchUtils";
 
@@ -40,25 +41,48 @@ export class BranchManager {
   async safeMergeBranch(
     targetBranch: string,
     sourceBranch: string,
-    conflictHandler: (conflictFiles: string[]) => Promise<boolean>
+    conflictHandler: (conflictFiles: string[]) => Promise<boolean>,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>
   ): Promise<boolean> {
     try {
+      if (progress) {
+        progress.report({ message: `检查远程分支 ${targetBranch}...`, increment: 5 });
+      }
+      
       const remoteExists = await this.gitOps.checkRemoteBranchExists(targetBranch);
+      
+      if (progress) {
+        progress.report({ message: `切换到目标分支 ${targetBranch}...`, increment: 10 });
+      }
       
       // 安全切换分支（如果本地不存在会从远程创建）
       await this.gitOps.checkoutBranch(targetBranch);
       
       // 如果远程分支存在，确保上游关联并拉取最新代码
       if (remoteExists) {
+        if (progress) {
+          progress.report({ message: `设置上游分支关联...`, increment: 5 });
+        }
         await this.gitOps.ensureBranchUpstream(targetBranch);
+        
+        if (progress) {
+          progress.report({ message: `拉取最新代码...`, increment: 10 });
+        }
         await this.gitOps.pullBranch(targetBranch);
       }
 
+      if (progress) {
+        progress.report({ message: `合并 ${sourceBranch} 到 ${targetBranch}...`, increment: 30 });
+      }
+      
       try {
         await this.gitOps.mergeBranch(sourceBranch);
       } catch (mergeError) {
         const hasConflicts = await this.gitOps.checkMergeConflicts();
         if (hasConflicts) {
+          if (progress) {
+            progress.report({ message: `检测到合并冲突，等待处理...`, increment: 0 });
+          }
           const conflictFiles = await this.gitOps.getConflictFiles();
           const resolved = await conflictHandler(conflictFiles);
           if (!resolved) {
@@ -69,6 +93,10 @@ export class BranchManager {
         }
       }
 
+      if (progress) {
+        progress.report({ message: `推送合并结果到远程...`, increment: 20 });
+      }
+      
       if (remoteExists) {
         await this.gitOps.pushBranch(targetBranch);
       } else {

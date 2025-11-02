@@ -67,13 +67,34 @@ export class GitMergeService {
     let currentBranch = "";
 
     try {
-      currentBranch = await this.mergeWorkflow.prepareMergeEnvironment();
-      const targetBranch = await this.mergeWorkflow.gatherMergeParameters();
-      await this.mergeWorkflow.executeMainMergeFlow(currentBranch, targetBranch);
-      vscode.window.showInformationMessage(`✓ 合并流程完成！`);
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "Git合并流程进行中",
+          cancellable: false
+        },
+        async (progress) => {
+          try {
+            progress.report({ message: "⚠️ 合并过程中请不要手动操作Git！准备合并环境...", increment: 0 });
+            currentBranch = await this.mergeWorkflow.prepareMergeEnvironment(progress);
+            
+            progress.report({ message: "请选择目标分支...", increment: 0 });
+            const targetBranch = await this.mergeWorkflow.gatherMergeParameters();
+            
+            progress.report({ message: `⚠️ 正在合并到 ${targetBranch}，请勿手动操作Git！`, increment: 10 });
+            await this.mergeWorkflow.executeMainMergeFlow(currentBranch, targetBranch, progress);
+            
+            progress.report({ message: "✅ 合并完成！", increment: 100 });
+            vscode.window.showInformationMessage(`✓ 合并流程完成！`);
+          } catch (error: any) {
+            await this.mergeWorkflow.handleMergeError(error, currentBranch);
+            throw error;
+          }
+        }
+      );
     } catch (error: any) {
-      await this.mergeWorkflow.handleMergeError(error, currentBranch);
-      throw error;
+      const errorMessage = error?.message || "未知错误";
+      vscode.window.showErrorMessage(`合并失败: ${errorMessage}`);
     } finally {
       GitMergeService.isOperationInProgress = false;
     }
