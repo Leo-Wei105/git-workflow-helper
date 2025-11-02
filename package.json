@@ -77,17 +77,17 @@
     "commands": [
       {
         "command": "gitWorkflowHelper.createBranch",
-        "title": "创建功能分支",
+        "title": "Git工作流助手: 创建功能分支",
         "category": "Git工作流助手"
       },
       {
         "command": "gitWorkflowHelper.mergeFeatureBranch",
-        "title": "合并功能分支",
+        "title": "Git工作流助手: 合并功能分支",
         "category": "Git工作流助手"
       },
       {
         "command": "gitWorkflowHelper.manageConfiguration",
-        "title": "配置管理",
+        "title": "Git工作流助手: 配置管理",
         "category": "Git工作流助手"
       }
     ],
@@ -143,22 +143,27 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "version:patch": "node scripts/version-bump.js patch",
-    "version:minor": "node scripts/version-bump.js minor",
-    "version:major": "node scripts/version-bump.js major",
-    "package": "node scripts/package.js",
-    "package:patch": "node scripts/package.js patch",
-    "package:minor": "node scripts/package.js minor",
-    "package:major": "node scripts/package.js major",
-    "build": "npm run compile && npx vsce package --no-update-package-json",
-    "release": "npm run package && echo '✅ 发布包已生成，请手动安装测试'",
-    "clean:gitcache": "git rm -r --cached . && git add ."
+    "build": "npm run compile",
+    "clean": "rimraf out *.vsix",
+    "prepublishOnly": "npm run clean && npm run build",
+    "package": "npm run build && vsce package",
+    "publish": "npm run build && vsce publish",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "version:minor": "npm version minor --no-git-tag-version",
+    "version:major": "npm version major --no-git-tag-version",
+    "package:patch": "npm version patch --no-git-tag-version && npm run package",
+    "package:minor": "npm version minor --no-git-tag-version && npm run package",
+    "package:major": "npm version major --no-git-tag-version && npm run package",
+    "publish:patch": "npm run build && vsce publish patch",
+    "publish:minor": "npm run build && vsce publish minor",
+    "publish:major": "npm run build && vsce publish major"
   },
   "devDependencies": {
     "@types/node": "^20.x",
     "@types/vscode": "^1.74.0",
     "@vscode/vsce": "^2.32.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "rimraf": "^5.0.5"
   },
   "keywords": [
     "git",
