@@ -1,7 +1,6 @@
 export interface BranchPrefix {
     prefix: string;
     description: string;
-    isDefault: boolean;
 }
 
 export interface BranchCreationOptions {

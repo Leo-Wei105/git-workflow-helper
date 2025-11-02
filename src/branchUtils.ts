@@ -139,22 +139,5 @@ export class BranchUtils {
         const { prefix, description, username, date } = options;
         return `${prefix}/${date}/${description}_${username}`;
     }
-
-    /**
-     * 清理字符串，移除非法字符
-     */
-    static sanitizeString(str: string): string {
-        return str.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '');
-    }
-
-    /**
-     * 截断字符串到指定长度
-     */
-    static truncateString(str: string, maxLength: number): string {
-        if (str.length <= maxLength) {
-            return str;
-        }
-        return str.substring(0, maxLength);
-    }
 }
 

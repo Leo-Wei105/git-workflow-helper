@@ -1,6 +1,4 @@
 import * as vscode from "vscode";
-import { exec } from "child_process";
-import { promisify } from "util";
 import {
   BranchPrefix,
   BranchCreationOptions,
@@ -10,56 +8,19 @@ import {
 } from "./branchTypes";
 import { BranchConfigManager } from "./branchConfigManager";
 import { BranchUtils } from "./branchUtils";
-
-const execAsync = promisify(exec);
+import { GitOperations } from "./gitOperations";
 
 export class BranchCreator {
   private configManager: BranchConfigManager;
+  private gitOps: GitOperations;
 
   constructor(configManager: BranchConfigManager) {
     this.configManager = configManager;
-  }
-
-  /**
-   * 获取工作区根目录
-   */
-  private getWorkspaceRoot(): string {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error("请先打开一个工作区");
     }
-    return workspaceFolder.uri.fsPath;
-  }
-
-  /**
-   * 执行Git命令
-   */
-  private async executeGitCommand(command: string): Promise<string> {
-    const workspaceRoot = this.getWorkspaceRoot();
-    try {
-      const { stdout, stderr } = await execAsync(command, {
-        cwd: workspaceRoot,
-      });
-      if (stderr && !stderr.includes("warning")) {
-        console.warn("Git命令警告:", stderr);
-      }
-      return stdout.trim();
-    } catch (error: any) {
-      console.error("Git命令失败:", error);
-      throw new Error(`Git命令执行失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 检查是否为Git仓库
-   */
-  private async isGitRepository(): Promise<boolean> {
-    try {
-      await this.executeGitCommand("git rev-parse --git-dir");
-      return true;
-    } catch {
-      return false;
-    }
+    this.gitOps = new GitOperations(workspaceFolder.uri.fsPath);
   }
 
   /**
@@ -68,14 +29,12 @@ export class BranchCreator {
   private async getGitUsername(): Promise<string> {
     const config = this.configManager.getConfiguration();
 
-    // 如果设置了自定义用户名，使用自定义用户名
     if (config.customGitName) {
       return config.customGitName;
     }
 
-    // 否则从Git配置获取
     try {
-      const username = await this.executeGitCommand("git config user.name");
+      const username = await this.gitOps.execGitCommand("git config user.name");
       if (!username) {
         throw new Error("未设置Git用户名，请先配置Git用户名或在插件设置中指定");
       }
@@ -91,29 +50,22 @@ export class BranchCreator {
   private async getAllBranches(): Promise<GitBranch[]> {
     try {
       const branches: GitBranch[] = [];
-
-      // 获取当前分支
       let currentBranch = "";
+      
       try {
-        currentBranch = await this.executeGitCommand(
-          "git branch --show-current"
-        );
+        currentBranch = await this.gitOps.getCurrentBranch();
       } catch {
-        // 如果获取当前分支失败，可能是在detached HEAD状态
         currentBranch = "";
       }
 
       // 获取本地分支
-      const localBranchOutput = await this.executeGitCommand(
+      const localBranchOutput = await this.gitOps.execGitCommand(
         'git branch --format="%(refname:short)|%(objectname:short)"'
       );
       if (localBranchOutput) {
-        const localBranches = localBranchOutput
-          .split("\n")
-          .filter((line) => line.trim());
-        localBranches.forEach((line) => {
+        localBranchOutput.split("\n").filter((line) => line.trim()).forEach((line) => {
           const [name, commit] = line.split("|");
-          if (name && name.trim()) {
+          if (name?.trim()) {
             branches.push({
               name: name.trim(),
               current: name.trim() === currentBranch,
@@ -126,16 +78,13 @@ export class BranchCreator {
 
       // 获取远程分支
       try {
-        const remoteBranchOutput = await this.executeGitCommand(
+        const remoteBranchOutput = await this.gitOps.execGitCommand(
           'git branch -r --format="%(refname:short)|%(objectname:short)"'
         );
         if (remoteBranchOutput) {
-          const remoteBranches = remoteBranchOutput
-            .split("\n")
-            .filter((line) => line.trim());
-          remoteBranches.forEach((line) => {
+          remoteBranchOutput.split("\n").filter((line) => line.trim()).forEach((line) => {
             const [name, commit] = line.split("|");
-            if (name && name.trim() && !name.includes("HEAD")) {
+            if (name?.trim() && !name.includes("HEAD")) {
               branches.push({
                 name: name.trim(),
                 current: false,
@@ -160,7 +109,7 @@ export class BranchCreator {
    */
   private async branchExists(branchName: string): Promise<boolean> {
     try {
-      await this.executeGitCommand(`git rev-parse --verify ${branchName}`);
+      await this.gitOps.execGitCommand(`git rev-parse --verify ${branchName}`);
       return true;
     } catch {
       return false;
@@ -171,7 +120,6 @@ export class BranchCreator {
    * 检查是否为远程分支
    */
   private isRemoteBranch(branchName: string): boolean {
-    // 远程分支通常以 origin/ 或其他远程名称开头
     return branchName.includes("/") && !branchName.startsWith("refs/heads/");
   }
 
@@ -187,30 +135,18 @@ export class BranchCreator {
 
     try {
       if (config.autoCheckout) {
-        // 创建并切换到新分支
-        await this.executeGitCommand(
-          `git checkout -b ${branchName} ${baseBranch}`
-        );
-        vscode.window.showInformationMessage(
-          `成功创建分支: ${branchName} (已自动切换)`
-        );
+        await this.gitOps.execGitCommand(`git checkout -b ${branchName} ${baseBranch}`);
+        vscode.window.showInformationMessage(`✓ 成功创建分支: ${branchName}`);
       } else {
-        // 仅创建分支，不切换
-        await this.executeGitCommand(`git branch ${branchName} ${baseBranch}`);
-        vscode.window.showInformationMessage(`成功创建分支: ${branchName}`);
+        await this.gitOps.execGitCommand(`git branch ${branchName} ${baseBranch}`);
+        vscode.window.showInformationMessage(`✓ 成功创建分支: ${branchName}`);
       }
 
-      // 如果基分支是远程分支，取消新分支的上游分支设置
-      // 这样新分支就不会关联到远程分支，直到用户主动推送
       if (isRemoteBaseBranch) {
         try {
-          await this.executeGitCommand(
-            `git branch --unset-upstream ${branchName}`
-          );
-          console.log(`已取消分支 ${branchName} 的远程关联`);
-        } catch (error) {
-          // 如果取消上游分支失败，记录警告但不影响主流程
-          console.warn(`取消分支 ${branchName} 远程关联失败:`, error);
+          await this.gitOps.execGitCommand(`git branch --unset-upstream ${branchName}`);
+        } catch {
+          // 忽略错误
         }
       }
     } catch (error) {
@@ -222,12 +158,7 @@ export class BranchCreator {
    * 切换到现有分支
    */
   private async checkoutBranch(branchName: string): Promise<void> {
-    try {
-      await this.executeGitCommand(`git checkout ${branchName}`);
-      vscode.window.showInformationMessage(`已切换到分支: ${branchName}`);
-    } catch (error) {
-      throw new Error(`切换分支失败: ${error}`);
-    }
+    await this.gitOps.checkoutBranch(branchName);
   }
 
   /**
@@ -248,8 +179,8 @@ export class BranchCreator {
     // 创建选择项
     const items = prefixes.map((prefix) => ({
       label: prefix.prefix,
-      description: prefix.description,
-      detail: prefix.isDefault ? "默认" : "",
+      description: "",
+      detail: "",
       prefix: prefix,
     }));
 
@@ -386,9 +317,7 @@ export class BranchCreator {
    */
   async createBranch(): Promise<BranchCreationResult> {
     try {
-      // 检查是否为Git仓库
-      const isGitRepo = await this.isGitRepository();
-      if (!isGitRepo) {
+      if (!(await this.gitOps.checkGitRepository())) {
         throw new Error("当前目录不是Git仓库");
       }
 
