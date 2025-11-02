@@ -1,0 +1,344 @@
+{
+  "name": "git-workflow-helper",
+  "displayName": "Git工作流助手",
+  "description": "Git工作流自动化工具：快速创建标准化分支、自动化分支合并流程",
+  "version": "0.0.1",
+  "publisher": "Leo-Wei105",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Leo-Wei105/git-workflow-helper.git"
+  },
+  "icon": "icons/icon.png",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:scm"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Git工作流助手",
+      "properties": {
+        "gitWorkflowHelper.mainBranch": {
+          "type": "string",
+          "default": "master",
+          "description": "主分支名称（用于新建分支的基础分支）"
+        },
+        "gitWorkflowHelper.targetBranches": {
+          "type": "array",
+          "default": [
+            {
+              "name": "uat",
+              "description": "测试环境"
+            },
+            {
+              "name": "pre",
+              "description": "预发布环境"
+            }
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "分支名称"
+              },
+              "description": {
+                "type": "string",
+                "description": "分支描述"
+              }
+            },
+            "required": [
+              "name",
+              "description"
+            ]
+          },
+          "description": "可选的目标分支列表，支持自定义添加更多分支"
+        },
+        "gitWorkflowHelper.featureBranchConfig": {
+          "type": "object",
+          "default": {
+            "patterns": [
+              "feature",
+              "feat",
+              "bugfix",
+              "hotfix",
+              "fix"
+            ],
+            "description": "功能分支命名模式"
+          },
+          "properties": {
+            "patterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "功能分支命名模式列表"
+            },
+            "description": {
+              "type": "string",
+              "description": "配置描述"
+            }
+          },
+          "description": "功能分支命名规则配置，用于识别哪些分支可以进行合并操作"
+        },
+        "gitWorkflowHelper.autoDetectMainBranch": {
+          "type": "boolean",
+          "default": false,
+          "description": "自动检测主分支（优先级高于手动设置）"
+        },
+        "gitWorkflowHelper.branchPrefixes": {
+          "type": "array",
+          "default": [
+            {
+              "prefix": "feature",
+              "description": "功能分支",
+              "isDefault": true
+            },
+            {
+              "prefix": "feat",
+              "description": "功能分支简写",
+              "isDefault": false
+            },
+            {
+              "prefix": "bugfix",
+              "description": "修复分支",
+              "isDefault": false
+            },
+            {
+              "prefix": "hotfix",
+              "description": "热修复分支",
+              "isDefault": false
+            },
+            {
+              "prefix": "fix",
+              "description": "修复分支简写",
+              "isDefault": false
+            }
+          ],
+          "description": "分支前缀配置，用于创建标准化命名的分支",
+          "items": {
+            "type": "object",
+            "properties": {
+              "prefix": {
+                "type": "string",
+                "description": "分支前缀"
+              },
+              "description": {
+                "type": "string",
+                "description": "前缀描述"
+              },
+              "isDefault": {
+                "type": "boolean",
+                "description": "是否为默认前缀"
+              }
+            }
+          }
+        },
+        "gitWorkflowHelper.customGitName": {
+          "type": "string",
+          "default": "",
+          "description": "自定义Git用户名（留空则使用Git配置），用于分支命名"
+        },
+        "gitWorkflowHelper.dateFormat": {
+          "type": "string",
+          "default": "yyyyMMdd",
+          "description": "分支命名中的日期格式",
+          "enum": [
+            "yyyyMMdd",
+            "yyyy-MM-dd",
+            "yyMMdd"
+          ]
+        },
+        "gitWorkflowHelper.autoCheckout": {
+          "type": "boolean",
+          "default": true,
+          "description": "创建分支后自动切换到新分支"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "gitWorkflowHelper.createBranch",
+        "title": "创建功能分支",
+        "category": "Git工作流助手"
+      },
+      {
+        "command": "gitWorkflowHelper.managePrefixes",
+        "title": "管理分支前缀",
+        "category": "Git工作流助手"
+      },
+      {
+        "command": "gitWorkflowHelper.mergeFeatureBranch",
+        "title": "合并Feature分支",
+        "category": "Git工作流助手"
+      },
+      {
+        "command": "gitWorkflowHelper.quickCommitAndMerge",
+        "title": "快速提交并合并",
+        "category": "Git工作流助手"
+      },
+      {
+        "command": "gitWorkflowHelper.manageConfiguration",
+        "title": "配置管理",
+        "category": "Git工作流助手"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "gitWorkflowHelper.createBranch",
+        "key": "ctrl+alt+shift+b",
+        "mac": "cmd+alt+shift+b",
+        "when": "gitOpenRepositoryCount > 0"
+      },
+      {
+        "command": "gitWorkflowHelper.mergeFeatureBranch",
+        "key": "ctrl+alt+shift+m",
+        "mac": "cmd+alt+shift+m",
+        "when": "gitOpenRepositoryCount > 0"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "gitWorkflowHelper.createBranch",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.managePrefixes",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.mergeFeatureBranch",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.quickCommitAndMerge",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.manageConfiguration",
+          "when": "workspaceFolderCount > 0"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "gitWorkflowHelper.createBranch",
+          "group": "inline",
+          "when": "scmProvider == git && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.managePrefixes",
+          "group": "inline",
+          "when": "scmProvider == git && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.mergeFeatureBranch",
+          "group": "inline",
+          "when": "scmProvider == git && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.quickCommitAndMerge",
+          "group": "inline",
+          "when": "scmProvider == git && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.manageConfiguration",
+          "group": "inline",
+          "when": "scmProvider == git && gitOpenRepositoryCount > 0"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "gitWorkflowHelper.createBranch",
+          "group": "7_modification",
+          "when": "explorerResourceIsFolder && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.managePrefixes",
+          "group": "7_modification",
+          "when": "explorerResourceIsFolder && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.mergeFeatureBranch",
+          "group": "7_modification",
+          "when": "explorerResourceIsFolder && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.quickCommitAndMerge",
+          "group": "7_modification",
+          "when": "explorerResourceIsFolder && gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.manageConfiguration",
+          "group": "7_modification",
+          "when": "explorerResourceIsFolder && gitOpenRepositoryCount > 0"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "gitWorkflowHelper.createBranch",
+          "group": "1_modification",
+          "when": "gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.managePrefixes",
+          "group": "1_modification",
+          "when": "gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.mergeFeatureBranch",
+          "group": "1_modification",
+          "when": "gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.quickCommitAndMerge",
+          "group": "1_modification",
+          "when": "gitOpenRepositoryCount > 0"
+        },
+        {
+          "command": "gitWorkflowHelper.manageConfiguration",
+          "group": "1_modification",
+          "when": "gitOpenRepositoryCount > 0"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "version:patch": "node scripts/version-bump.js patch",
+    "version:minor": "node scripts/version-bump.js minor",
+    "version:major": "node scripts/version-bump.js major",
+    "package": "node scripts/package.js",
+    "package:patch": "node scripts/package.js patch",
+    "package:minor": "node scripts/package.js minor",
+    "package:major": "node scripts/package.js major",
+    "build": "npm run compile && npx vsce package --no-update-package-json",
+    "release": "npm run package && echo '✅ 发布包已生成，请手动安装测试'",
+    "clean:gitcache": "git rm -r --cached . && git add ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.74.0",
+    "@vscode/vsce": "^2.32.0",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "git",
+    "merge",
+    "branch",
+    "automation",
+    "workflow",
+    "creator"
+  ],
+  "author": "",
+  "license": "MIT"
+}

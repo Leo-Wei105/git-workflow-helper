@@ -1,0 +1,26 @@
+{
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "files.exclude": {
+    "out": false,
+    "node_modules": true
+  },
+  "gitMergeHelper.autoDetectMainBranch": true,
+  "gitMergeHelper.targetBranches": [
+    {
+      "name": "uat",
+      "description": "测试环境"
+    },
+    {
+      "name": "pre",
+      "description": "预发布环境"
+    },
+    {
+      "name": "main",
+      "description": "主分支"
+    }
+  ]
+}

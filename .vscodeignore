@@ -1,0 +1,38 @@
+# VS Code相关文件
+.vscode/**
+.vscode-test/**
+.vscodeignore
+
+# 源代码文件（编译后的out目录已包含）
+src/**
+**/*.ts
+**/*.map
+
+# 构建和开发工具
+tsconfig.json
+**/.eslintrc.json
+.gitignore
+.yarnrc
+
+# 文档文件（保留README.md，其他可选）
+BUILD.md
+USAGE.md
+README_OTHER.md
+IMPROVEMENTS.md
+SUMMARY.md
+
+# 脚本文件（开发时使用）
+scripts/**
+
+# 依赖管理文件
+package-lock.json
+node_modules/**
+
+# Git相关
+.git/**
+
+# 已生成的VSIX包文件
+*.vsix
+
+# 其他开发文件
+vsc-extension-quickstart.md 
