@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
+import { BranchConfigManager } from "./branchConfigManager";
 import {
-  BranchPrefix,
   BranchCreationOptions,
   BranchCreationResult,
-  GitBranch,
+  BranchPrefix,
   DateFormat,
+  GitBranch,
 } from "./branchTypes";
-import { BranchConfigManager } from "./branchConfigManager";
 import { BranchUtils } from "./branchUtils";
 import { GitOperations } from "./gitOperations";
 
@@ -305,8 +305,7 @@ export class BranchCreator {
         modal: true,
         detail: items.join("\n"),
       },
-      "确认",
-      "取消"
+      "确认"
     );
 
     return confirmed === "确认";
