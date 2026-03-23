@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
+import { AppError } from "./errors";
 import { GitOperations } from "./gitOperations";
 import { BranchUtils } from "./branchUtils";
+
+export type MergeConflictResolution = "resolved" | "aborted" | "pending";
 
 /**
  * 分支管理类 - 负责分支相关操作和验证
@@ -41,15 +44,32 @@ export class BranchManager {
   async safeMergeBranch(
     targetBranch: string,
     sourceBranch: string,
-    conflictHandler: (conflictFiles: string[]) => Promise<boolean>,
+    conflictHandler: (conflictFiles: string[]) => Promise<MergeConflictResolution>,
     progress?: vscode.Progress<{ message?: string; increment?: number }>
-  ): Promise<boolean> {
+  ): Promise<void> {
     try {
+      try {
+        await this.gitOps.fetchRemote("origin");
+      } catch (error) {
+        vscode.window.showWarningMessage(
+          "获取远程分支信息失败，将基于本地缓存继续执行，结果可能不是最新状态"
+        );
+      }
+
       if (progress) {
         progress.report({ message: `检查远程分支 ${targetBranch}...`, increment: 5 });
       }
       
       const remoteExists = await this.gitOps.checkRemoteBranchExists(targetBranch);
+      const localExists = await this.gitOps.checkLocalBranchExists(targetBranch);
+
+      if (!remoteExists && !localExists) {
+        throw new AppError(
+          `目标分支 ${targetBranch} 不存在（本地/远程）`,
+          "UNKNOWN",
+          { stage: "safeMergeBranch" }
+        );
+      }
       
       if (progress) {
         progress.report({ message: `切换到目标分支 ${targetBranch}...`, increment: 10 });
@@ -84,9 +104,14 @@ export class BranchManager {
             progress.report({ message: `检测到合并冲突，等待处理...`, increment: 0 });
           }
           const conflictFiles = await this.gitOps.getConflictFiles();
-          const resolved = await conflictHandler(conflictFiles);
-          if (!resolved) {
-            return false;
+          const resolution = await conflictHandler(conflictFiles);
+          if (resolution === "aborted") {
+            throw AppError.userCancelled("用户中止了合并流程");
+          }
+          if (resolution === "pending") {
+            throw new AppError("冲突尚未解决，合并未完成", "UNKNOWN", {
+              stage: "safeMergeBranch",
+            });
           }
         } else {
           throw mergeError;
@@ -100,14 +125,8 @@ export class BranchManager {
       if (remoteExists) {
         await this.gitOps.pushBranch(targetBranch);
       } else {
-        try {
-          await this.gitOps.pushBranch(targetBranch, true);
-        } catch {
-          // 推送失败忽略（可能是权限问题）
-        }
+        await this.gitOps.pushBranch(targetBranch, true);
       }
-      
-      return true;
     } catch (error) {
       console.error(`合并到 ${targetBranch} 失败:`, error);
       throw error;
@@ -118,6 +137,14 @@ export class BranchManager {
    * 确保远程分支存在并设置正确的上游关联
    */
   async ensureRemoteBranchExists(branchName: string): Promise<void> {
+    try {
+      await this.gitOps.fetchRemote("origin");
+    } catch {
+      vscode.window.showWarningMessage(
+        "获取远程分支信息失败，将尝试直接推送并建立上游关联"
+      );
+    }
+
     const exists = await this.gitOps.checkRemoteBranchExists(branchName);
     if (exists) {
       await this.gitOps.ensureBranchUpstream(branchName);

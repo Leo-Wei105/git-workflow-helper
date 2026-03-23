@@ -91,6 +91,14 @@ export class GitOperations {
   }
 
   /**
+   * 检查是否存在已暂存但未提交的更改
+   */
+  async checkStagedChanges(): Promise<boolean> {
+    const staged = await this.execGitArgs(["diff", "--cached", "--name-only"]);
+    return staged.length > 0;
+  }
+
+  /**
    * 检查是否存在合并冲突
    */
   async checkMergeConflicts(): Promise<boolean> {
@@ -139,6 +147,13 @@ export class GitOperations {
   }
 
   /**
+   * 拉取远程引用信息（不合并代码）
+   */
+  async fetchRemote(remoteName: string = "origin"): Promise<void> {
+    await this.execGitArgs(["fetch", remoteName]);
+  }
+
+  /**
    * 推送分支到远程
    */
   async pushBranch(
@@ -164,9 +179,26 @@ export class GitOperations {
   }
 
   /**
+   * 使用Git原生命令验证分支名合法性
+   */
+  async validateBranchNameWithGit(branchName: string): Promise<{ isValid: boolean; error?: string }> {
+    if (!branchName || branchName.trim().length === 0) {
+      return { isValid: false, error: "分支名称不能为空" };
+    }
+
+    try {
+      await this.execGitArgs(["check-ref-format", "--branch", branchName]);
+      return { isValid: true };
+    } catch (error: any) {
+      const message = error?.message || "分支名称不符合Git规则";
+      return { isValid: false, error: `分支名不合法: ${message}` };
+    }
+  }
+
+  /**
    * 切换分支（如果本地不存在则从远程创建）
    */
-  async checkoutBranch(branchName: string): Promise<void> {
+  async checkoutBranch(branchName: string, baseRef?: string): Promise<void> {
     const localExists = await this.checkLocalBranchExists(branchName);
     
     if (localExists) {
@@ -183,8 +215,15 @@ export class GitOperations {
           `origin/${branchName}`,
         ]);
       } else {
-        // 如果本地和远程都不存在，尝试创建新分支
-        await this.execGitArgs(["checkout", "-b", branchName]);
+        // 只有显式提供 baseRef 时才允许创建新分支，避免误从当前分支派生
+        if (!baseRef) {
+          throw new AppError(
+            `分支 ${branchName} 在本地和远程均不存在，已阻止自动创建`,
+            "UNKNOWN",
+            { stage: "checkoutBranch" }
+          );
+        }
+        await this.execGitArgs(["checkout", "-b", branchName, baseRef]);
       }
     }
   }
@@ -206,9 +245,23 @@ export class GitOperations {
   /**
    * 提交更改
    */
-  async commitChanges(message: string): Promise<void> {
+  async stageAllChanges(): Promise<void> {
     await this.execGitArgs(["add", "."]);
+  }
+
+  /**
+   * 仅提交已暂存的更改
+   */
+  async commitStagedChanges(message: string): Promise<void> {
     await this.execGitArgs(["commit", "-m", message]);
+  }
+
+  /**
+   * 暂存全部并提交
+   */
+  async commitAllChanges(message: string): Promise<void> {
+    await this.stageAllChanges();
+    await this.commitStagedChanges(message);
   }
 
   /**

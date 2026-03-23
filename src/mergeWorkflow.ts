@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { BranchConfigManager } from "./branchConfigManager";
-import { BranchManager } from "./branchManager";
+import { BranchManager, MergeConflictResolution } from "./branchManager";
 import { AppError } from "./errors";
 import { GitOperations } from "./gitOperations";
 import { MergeTargetConfigManager } from "./mergeTargetConfigManager";
@@ -28,13 +28,72 @@ export class MergeWorkflow {
   }
 
   /**
+   * 读取冲突文件批量打开数量配置，并做安全兜底
+   */
+  private getMaxConflictFilesToOpen(): number {
+    const config = vscode.workspace.getConfiguration("gitWorkflowHelper");
+    const configured = config.get<number>("maxConflictFilesToOpen", 5);
+    if (!Number.isFinite(configured)) {
+      return 5;
+    }
+    return Math.min(20, Math.max(1, Math.floor(configured)));
+  }
+
+  /**
+   * 打开冲突文件（支持单个选择或批量打开前N个）
+   */
+  private async openConflictFiles(conflictFiles: string[]): Promise<void> {
+    if (conflictFiles.length === 0) {
+      return;
+    }
+
+    const openAction = await vscode.window.showQuickPick(
+      [
+        { label: "选择文件打开", value: "pick-one" },
+        { label: `批量打开前 ${this.getMaxConflictFilesToOpen()} 个`, value: "open-top-n" },
+      ],
+      { placeHolder: "请选择冲突文件打开方式" }
+    );
+
+    if (!openAction) {
+      return;
+    }
+
+    if (openAction.value === "open-top-n") {
+      const filesToOpen = conflictFiles.slice(0, this.getMaxConflictFilesToOpen());
+      for (const relativePath of filesToOpen) {
+        const filePath = path.join(this.gitOps.getWorkspaceRoot(), relativePath);
+        const document = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(document, { preview: false });
+      }
+      return;
+    }
+
+    const selected = await vscode.window.showQuickPick(
+      conflictFiles.map((file) => ({
+        label: file,
+        value: file,
+      })),
+      { placeHolder: "请选择要打开的冲突文件" }
+    );
+
+    if (!selected) {
+      return;
+    }
+
+    const filePath = path.join(this.gitOps.getWorkspaceRoot(), selected.value);
+    const document = await vscode.workspace.openTextDocument(filePath);
+    await vscode.window.showTextDocument(document);
+  }
+
+  /**
    * 处理合并冲突
    */
   private async handleMergeConflicts(
     conflictFiles: string[]
-  ): Promise<boolean> {
+  ): Promise<MergeConflictResolution> {
     if (conflictFiles.length === 0) {
-      return true;
+      return "resolved";
     }
 
     const action = await vscode.window.showWarningMessage(
@@ -46,32 +105,25 @@ export class MergeWorkflow {
 
     switch (action) {
       case "打开冲突文件":
-        if (conflictFiles.length > 0) {
-          const filePath = path.join(
-            this.gitOps.getWorkspaceRoot(),
-            conflictFiles[0]
-          );
-          const document = await vscode.workspace.openTextDocument(filePath);
-          await vscode.window.showTextDocument(document);
-        }
-        return false;
+        await this.openConflictFiles(conflictFiles);
+        return "pending";
 
       case "中止合并":
         await this.gitOps.abortMerge();
-        return false;
+        return "aborted";
 
       case "手动解决后继续":
         return await this.waitForConflictResolution();
 
       default:
-        return false;
+        return "pending";
     }
   }
 
   /**
    * 等待冲突解决
    */
-  private async waitForConflictResolution(): Promise<boolean> {
+  private async waitForConflictResolution(): Promise<MergeConflictResolution> {
     while (true) {
       const hasConflicts = await this.gitOps.checkMergeConflicts();
       if (!hasConflicts) {
@@ -84,11 +136,12 @@ export class MergeWorkflow {
           );
 
           if (shouldCommit === "提交") {
-            await this.gitOps.commitChanges("feat: 合并冲突解决");
-            return true;
+            await this.gitOps.commitStagedChanges("feat: 合并冲突解决");
+            return "resolved";
           }
+          return "aborted";
         }
-        return true;
+        return "resolved";
       }
 
       const continueWaiting = await vscode.window.showInformationMessage(
@@ -99,7 +152,7 @@ export class MergeWorkflow {
 
       if (continueWaiting === "中止合并") {
         await this.gitOps.abortMerge();
-        return false;
+        return "aborted";
       }
     }
   }
@@ -160,36 +213,50 @@ export class MergeWorkflow {
       return;
     }
 
-    const shouldCommit = await vscode.window.showWarningMessage(
-      "检测到未提交的更改，是否现在提交？",
-      "是",
-      "否"
+    const action = await vscode.window.showWarningMessage(
+      "检测到未提交的更改，请选择处理方式",
+      "仅提交已暂存",
+      "暂存全部后提交",
+      "取消"
     );
 
-    if (shouldCommit === "是") {
-      const commitMessage = await vscode.window.showInputBox({
-        prompt: "请输入commit内容",
-        placeHolder: "输入提交信息...",
-        validateInput: (value) => {
-          if (!value || value.trim().length === 0) {
-            return "提交信息不能为空";
-          }
-          if (value.length > 100) {
-            return "提交信息长度不能超过100个字符";
-          }
-          return null;
-        },
-      });
-
-      if (!commitMessage) {
-        throw AppError.userCancelled("未输入提交信息，操作已取消");
-      }
-
-      await this.gitOps.commitChanges(`feat: ${commitMessage}`);
-      await this.gitOps.pushBranch(currentBranch);
-    } else {
+    if (!action || action === "取消") {
       throw AppError.userCancelled("请先提交或存储更改后再运行");
     }
+
+    if (action === "仅提交已暂存") {
+      const hasStagedChanges = await this.gitOps.checkStagedChanges();
+      if (!hasStagedChanges) {
+        throw new AppError("当前没有已暂存内容，请先暂存后重试", "UNKNOWN", {
+          stage: "handleUncommittedChanges",
+        });
+      }
+    }
+
+    if (action === "暂存全部后提交") {
+      await this.gitOps.stageAllChanges();
+    }
+
+    const commitMessage = await vscode.window.showInputBox({
+      prompt: "请输入commit内容",
+      placeHolder: "输入提交信息...",
+      validateInput: (value) => {
+        if (!value || value.trim().length === 0) {
+          return "提交信息不能为空";
+        }
+        if (value.length > 100) {
+          return "提交信息长度不能超过100个字符";
+        }
+        return null;
+      },
+    });
+
+    if (!commitMessage) {
+      throw AppError.userCancelled("未输入提交信息，操作已取消");
+    }
+
+    await this.gitOps.commitStagedChanges(`feat: ${commitMessage}`);
+    await this.gitOps.pushBranch(currentBranch);
   }
 
   /**
@@ -244,18 +311,12 @@ export class MergeWorkflow {
   ): Promise<void> {
     progress.report({ message: `合并 ${currentBranch} 到 ${targetBranch}...`, increment: 30 });
     
-    const success = await this.branchManager.safeMergeBranch(
+    await this.branchManager.safeMergeBranch(
       targetBranch,
       currentBranch,
       this.handleMergeConflicts.bind(this),
       progress
     );
-
-    if (!success) {
-      throw new AppError(`合并到 ${targetBranch} 分支失败`, "UNKNOWN", {
-        stage: "executeMainMergeFlow",
-      });
-    }
     
     progress.report({ message: `推送合并结果到远程...`, increment: 20 });
   }

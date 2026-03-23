@@ -67,10 +67,45 @@
             "yyMMdd"
           ]
         },
+        "gitWorkflowHelper.branchNameFormat": {
+          "type": "string",
+          "default": "{prefix}/{date}/{description}_{username}",
+          "description": "自定义分支名称模板。仅在“分支命名模板预设”选择“自定义模板”时生效。支持占位符：{prefix}、{date}、{description}、{username}"
+        },
+        "gitWorkflowHelper.branchNameTemplatePreset": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "gitflow",
+            "date-first",
+            "username-first",
+            "release",
+            "ticket-like",
+            "custom"
+          ],
+          "enumItemLabels": [
+            "默认模板：{prefix}/{date}/{description}_{username}",
+            "GitFlow：{prefix}/{description}",
+            "日期优先：{date}/{prefix}/{description}",
+            "用户名优先：{username}/{prefix}/{description}",
+            "发布模板：release/{date}/{description}",
+            "单号风格：{prefix}/{description}-{username}",
+            "自定义模板（使用 branchNameFormat）"
+          ],
+          "description": "分支命名模板预设，可在设置中快捷选择"
+        },
         "gitWorkflowHelper.autoCheckout": {
           "type": "boolean",
           "default": true,
           "description": "创建分支后自动切换到新分支"
+        },
+        "gitWorkflowHelper.maxConflictFilesToOpen": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "合并冲突时批量打开文件的最大数量（1-20）"
         }
       }
     },

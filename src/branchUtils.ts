@@ -32,22 +32,6 @@ export class BranchUtils {
             };
         }
 
-        if (description.length > 50) {
-            return {
-                isValid: false,
-                error: '描述信息长度不能超过50个字符'
-            };
-        }
-
-        // 检查是否包含非法字符
-        const validPattern = /^[a-zA-Z0-9\u4e00-\u9fa5_-]+$/;
-        if (!validPattern.test(description)) {
-            return {
-                isValid: false,
-                error: '描述信息只能包含字母、数字、中文、下划线和短横线'
-            };
-        }
-
         return {
             isValid: true
         };
@@ -89,39 +73,6 @@ export class BranchUtils {
             };
         }
 
-        // 检查是否包含连续斜杠
-        if (branchName.includes('//')) {
-            return {
-                isValid: false,
-                error: '分支名称不能包含连续斜杠'
-            };
-        }
-
-        // 检查是否以斜杠开头或结尾
-        if (branchName.startsWith('/') || branchName.endsWith('/')) {
-            return {
-                isValid: false,
-                error: '分支名称不能以斜杠开头或结尾'
-            };
-        }
-
-        // 检查是否包含空格
-        if (branchName.includes(' ')) {
-            return {
-                isValid: false,
-                error: '分支名称不能包含空格'
-            };
-        }
-
-        // 检查是否包含其他Git不支持的字符
-        const invalidChars = /[~^:?*[\]\\]/;
-        if (invalidChars.test(branchName)) {
-            return {
-                isValid: false,
-                error: '分支名称包含Git不支持的字符'
-            };
-        }
-
         return {
             isValid: true
         };
@@ -135,9 +86,18 @@ export class BranchUtils {
         description: string;
         username: string;
         date: string;
+        format?: string;
     }): string {
-        const { prefix, description, username, date } = options;
-        return `${prefix}/${date}/${description}_${username}`;
+        const { prefix, description, username, date, format } = options;
+        const template = format && format.trim().length > 0
+            ? format
+            : '{prefix}/{date}/{description}_{username}';
+
+        return template
+            .replace(/\{prefix\}/g, prefix)
+            .replace(/\{date\}/g, date)
+            .replace(/\{description\}/g, description)
+            .replace(/\{username\}/g, username);
     }
 }
 

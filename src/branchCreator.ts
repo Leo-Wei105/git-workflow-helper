@@ -247,12 +247,10 @@ export class BranchCreator {
       config.dateFormat as DateFormat
     );
 
-    let previewBranchName = "";
-
     const description = await vscode.window.showInputBox({
       prompt: "输入分支描述信息",
       placeHolder: "例如：用户登录功能",
-      validateInput: (value) => {
+      validateInput: async (value) => {
         if (!value) {
           return "描述信息不能为空";
         }
@@ -268,14 +266,14 @@ export class BranchCreator {
           description: value,
           username,
           date: currentDate,
+          format: config.branchNameFormat,
         });
 
-        const branchValidation = BranchUtils.validateBranchName(previewName);
+        const branchValidation = await this.gitOps.validateBranchNameWithGit(previewName);
         if (!branchValidation.isValid) {
           return branchValidation.error;
         }
 
-        previewBranchName = previewName;
         return null;
       },
     });
@@ -289,7 +287,11 @@ export class BranchCreator {
   private async confirmBranchCreation(
     options: BranchCreationOptions
   ): Promise<boolean> {
-    const branchName = BranchUtils.generateBranchName(options);
+    const config = this.configManager.getConfiguration();
+    const branchName = BranchUtils.generateBranchName({
+      ...options,
+      format: config.branchNameFormat,
+    });
 
     const items = [
       `基分支: ${options.baseBranch}`,
@@ -359,21 +361,30 @@ export class BranchCreator {
         date: currentDate,
       };
 
-      const branchName = BranchUtils.generateBranchName(branchCreationOptions);
+      const configuredBranchName = BranchUtils.generateBranchName({
+        ...branchCreationOptions,
+        format: config.branchNameFormat,
+      });
+      const branchValidation = await this.gitOps.validateBranchNameWithGit(configuredBranchName);
+      if (!branchValidation.isValid) {
+        throw new AppError(branchValidation.error || "分支名不合法", "UNKNOWN", {
+          stage: "createBranch",
+        });
+      }
 
       // 步骤6: 检查分支是否存在
-      const exists = await this.branchExists(branchName);
+      const exists = await this.branchExists(configuredBranchName);
       if (exists) {
         const action = await vscode.window.showWarningMessage(
-          `分支 ${branchName} 已存在`,
+          `分支 ${configuredBranchName} 已存在`,
           "切换到该分支",
           "重新输入",
           "取消"
         );
 
         if (action === "切换到该分支") {
-          await this.checkoutBranch(branchName);
-          return { success: true, branchName };
+          await this.checkoutBranch(configuredBranchName);
+          return { success: true, branchName: configuredBranchName };
         } else if (action === "重新输入") {
           return await this.createBranch();
         } else {
@@ -388,9 +399,9 @@ export class BranchCreator {
       }
 
       // 步骤8: 创建分支
-      await this.createAndCheckoutBranch(branchName, baseBranch);
+      await this.createAndCheckoutBranch(configuredBranchName, baseBranch);
 
-      return { success: true, branchName };
+      return { success: true, branchName: configuredBranchName };
     } catch (error) {
       console.error("创建分支失败:", error);
       const errorMessage =

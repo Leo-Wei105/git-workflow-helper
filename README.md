@@ -166,8 +166,25 @@ hotfix/20250101/紧急修复支付异常_alex
   - `yyyy-MM-dd`：2025-01-01
   - `yyMMdd`：250101
 
+#### 分支命名模板配置
+- **gitWorkflowHelper.branchNameTemplatePreset**：分支命名模板预设（支持在设置页快捷选择）
+  - 默认模板：`{prefix}/{date}/{description}_{username}`
+  - GitFlow：`{prefix}/{description}`
+  - 日期优先：`{date}/{prefix}/{description}`
+  - 用户优先：`{username}/{prefix}/{description}`
+  - 发布模板：`release/{date}/{description}`
+  - 单号风格：`{prefix}/{description}-{username}`
+  - 自定义模板：使用 `gitWorkflowHelper.branchNameFormat`
+- **gitWorkflowHelper.branchNameFormat**：自定义分支名称模板
+  - 支持占位符：`{prefix}`、`{date}`、`{description}`、`{username}`
+  - 默认值：`{prefix}/{date}/{description}_{username}`
+  - 仅在 `gitWorkflowHelper.branchNameTemplatePreset = custom` 时生效
+
 #### 自动切换配置
 - **gitWorkflowHelper.autoCheckout**：创建分支后是否自动切换（默认开启）
+
+#### 冲突文件批量打开配置
+- **gitWorkflowHelper.maxConflictFilesToOpen**：合并冲突时批量打开文件的最大数量（默认 `5`，范围 `1-20`）
 
 ### 完整配置示例
 
@@ -183,7 +200,10 @@ hotfix/20250101/紧急修复支付异常_alex
   ],
   "gitWorkflowHelper.customGitName": "",
   "gitWorkflowHelper.dateFormat": "yyyyMMdd",
-  "gitWorkflowHelper.autoCheckout": true
+  "gitWorkflowHelper.branchNameTemplatePreset": "default",
+  "gitWorkflowHelper.branchNameFormat": "{prefix}/{date}/{description}_{username}",
+  "gitWorkflowHelper.autoCheckout": true,
+  "gitWorkflowHelper.maxConflictFilesToOpen": 5
 }
 ```
 
@@ -212,7 +232,10 @@ hotfix/20250101/紧急修复支付异常_alex
   ],
   "gitWorkflowHelper.customGitName": "yourname",
   "gitWorkflowHelper.dateFormat": "yyyyMMdd",
-  "gitWorkflowHelper.autoCheckout": true
+  "gitWorkflowHelper.branchNameTemplatePreset": "custom",
+  "gitWorkflowHelper.branchNameFormat": "{prefix}/{date}/{description}_{username}",
+  "gitWorkflowHelper.autoCheckout": true,
+  "gitWorkflowHelper.maxConflictFilesToOpen": 5
 }
 ```
 
@@ -246,7 +269,7 @@ hotfix/20250101/紧急修复支付异常_alex
 当遇到合并冲突时，插件会：
 1. **自动检测冲突文件**：识别所有冲突状态码（UU, AA, DD等）
 2. **提供处理选项**：
-   - **打开冲突文件**：在编辑器中打开第一个冲突文件
+   - **打开冲突文件**：可选择单个文件或批量打开前 N 个冲突文件（N 可配置）
    - **中止合并**：取消当前合并操作并回滚
    - **手动解决后继续**：等待用户解决冲突后继续
 3. **智能等待机制**：监控冲突解决状态

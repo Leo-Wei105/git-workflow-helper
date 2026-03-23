@@ -4,6 +4,29 @@ import { BranchUtils } from './branchUtils';
 
 export class BranchConfigManager {
     private readonly configurationSection = 'gitWorkflowHelper';
+    private readonly defaultBranchNameFormat = '{prefix}/{date}/{description}_{username}';
+
+    private getPresetFormat(preset: string, customFormat: string): string {
+        switch (preset) {
+            case 'default':
+                return this.defaultBranchNameFormat;
+            case 'gitflow':
+                return '{prefix}/{description}';
+            case 'date-first':
+                return '{date}/{prefix}/{description}';
+            case 'username-first':
+                return '{username}/{prefix}/{description}';
+            case 'release':
+                return 'release/{date}/{description}';
+            case 'ticket-like':
+                return '{prefix}/{description}-{username}';
+            case 'custom':
+            default:
+                return customFormat && customFormat.trim().length > 0
+                    ? customFormat
+                    : this.defaultBranchNameFormat;
+        }
+    }
 
     /**
      * 解析分支前缀字符串数组为 BranchPrefix 对象数组
@@ -37,11 +60,15 @@ export class BranchConfigManager {
     getConfiguration(): BranchConfigurationSchema {
         const config = vscode.workspace.getConfiguration(this.configurationSection);
         const prefixStrings = config.get<string[]>('branchPrefixes');
+        const preset = config.get<string>('branchNameTemplatePreset') || 'default';
+        const customFormat = config.get<string>('branchNameFormat') || this.defaultBranchNameFormat;
         
         return {
             branchPrefixes: this.parseBranchPrefixes(prefixStrings),
             customGitName: config.get<string>('customGitName') || '',
             dateFormat: (config.get<string>('dateFormat') || 'yyyyMMdd') as DateFormat,
+            branchNameTemplatePreset: preset,
+            branchNameFormat: this.getPresetFormat(preset, customFormat),
             autoCheckout: config.get<boolean>('autoCheckout') ?? true
         };
     }
@@ -53,11 +80,19 @@ export class BranchConfigManager {
         const config = vscode.workspace.getConfiguration(this.configurationSection);
         const prefixInspect = config.inspect<string[]>('branchPrefixes');
         const prefixStrings = prefixInspect?.workspaceValue ?? prefixInspect?.defaultValue;
+        const preset = config.inspect<string>('branchNameTemplatePreset')?.workspaceValue
+            ?? config.inspect<string>('branchNameTemplatePreset')?.defaultValue
+            ?? 'default';
+        const customFormat = config.inspect<string>('branchNameFormat')?.workspaceValue
+            ?? config.inspect<string>('branchNameFormat')?.defaultValue
+            ?? this.defaultBranchNameFormat;
         
         return {
             branchPrefixes: this.parseBranchPrefixes(prefixStrings),
             customGitName: config.inspect<string>('customGitName')?.workspaceValue ?? config.inspect<string>('customGitName')?.defaultValue ?? '',
             dateFormat: (config.inspect<string>('dateFormat')?.workspaceValue ?? config.inspect<string>('dateFormat')?.defaultValue ?? 'yyyyMMdd') as DateFormat,
+            branchNameTemplatePreset: preset,
+            branchNameFormat: this.getPresetFormat(preset, customFormat),
             autoCheckout: config.inspect<boolean>('autoCheckout')?.workspaceValue ?? config.inspect<boolean>('autoCheckout')?.defaultValue ?? true
         };
     }
@@ -69,11 +104,19 @@ export class BranchConfigManager {
         const config = vscode.workspace.getConfiguration(this.configurationSection);
         const prefixInspect = config.inspect<string[]>('branchPrefixes');
         const prefixStrings = prefixInspect?.globalValue ?? prefixInspect?.defaultValue;
+        const preset = config.inspect<string>('branchNameTemplatePreset')?.globalValue
+            ?? config.inspect<string>('branchNameTemplatePreset')?.defaultValue
+            ?? 'default';
+        const customFormat = config.inspect<string>('branchNameFormat')?.globalValue
+            ?? config.inspect<string>('branchNameFormat')?.defaultValue
+            ?? this.defaultBranchNameFormat;
         
         return {
             branchPrefixes: this.parseBranchPrefixes(prefixStrings),
             customGitName: config.inspect<string>('customGitName')?.globalValue ?? config.inspect<string>('customGitName')?.defaultValue ?? '',
             dateFormat: (config.inspect<string>('dateFormat')?.globalValue ?? config.inspect<string>('dateFormat')?.defaultValue ?? 'yyyyMMdd') as DateFormat,
+            branchNameTemplatePreset: preset,
+            branchNameFormat: this.getPresetFormat(preset, customFormat),
             autoCheckout: config.inspect<boolean>('autoCheckout')?.globalValue ?? config.inspect<boolean>('autoCheckout')?.defaultValue ?? true
         };
     }
@@ -159,6 +202,8 @@ export class BranchConfigManager {
         await config.update('branchPrefixes', defaultPrefixStrings, target);
         await config.update('customGitName', '', target);
         await config.update('dateFormat', 'yyyyMMdd', target);
+        await config.update('branchNameTemplatePreset', 'default', target);
+        await config.update('branchNameFormat', this.defaultBranchNameFormat, target);
         await config.update('autoCheckout', true, target);
     }
 

@@ -33,6 +33,8 @@ export interface BranchConfigurationSchema {
     branchPrefixes: BranchPrefix[];
     customGitName: string;
     dateFormat: string;
+    branchNameTemplatePreset: string;
+    branchNameFormat: string;
     autoCheckout: boolean;
 }
 
