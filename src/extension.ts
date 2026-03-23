@@ -2,6 +2,53 @@ import * as vscode from 'vscode';
 import { GitMergeService } from './gitMergeService';
 import { BranchCreator } from './branchCreator';
 import { BranchConfigManager } from './branchConfigManager';
+import { AppError, isUserCancelledError, toAppError } from './errors';
+
+async function selectWorkspaceRoot(): Promise<string> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        throw new AppError('请先打开一个工作区文件夹', 'INVALID_WORKSPACE', { stage: 'selectWorkspaceRoot' });
+    }
+
+    if (workspaceFolders.length === 1) {
+        return workspaceFolders[0].uri.fsPath;
+    }
+
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    if (activeUri) {
+        const activeFolder = vscode.workspace.getWorkspaceFolder(activeUri);
+        if (activeFolder) {
+            return activeFolder.uri.fsPath;
+        }
+    }
+
+    const selected = await vscode.window.showQuickPick(
+        workspaceFolders.map(folder => ({
+            label: folder.name,
+            description: folder.uri.fsPath,
+            fsPath: folder.uri.fsPath
+        })),
+        {
+            placeHolder: '检测到多个工作区，请选择要操作的 Git 仓库'
+        }
+    );
+
+    if (!selected) {
+        throw AppError.userCancelled('未选择工作区，操作已取消');
+    }
+
+    return selected.fsPath;
+}
+
+function handleCommandError(action: string, error: unknown): void {
+    const appError = toAppError(error, '未知错误');
+    if (isUserCancelledError(appError)) {
+        vscode.window.showInformationMessage(`已取消${action}: ${appError.message}`);
+        return;
+    }
+    const stageText = appError.stage ? ` [${appError.stage}]` : '';
+    vscode.window.showErrorMessage(`${action}失败${stageText}: ${appError.message}`);
+}
 
 /**
  * 插件激活函数
@@ -10,18 +57,17 @@ import { BranchConfigManager } from './branchConfigManager';
 export function activate(context: vscode.ExtensionContext) {
     console.log('Git工作流助手插件已激活');
 
-    const branchConfigManager = new BranchConfigManager();
-    const branchCreator = new BranchCreator(branchConfigManager);
-
     // 注册创建分支命令
     const createBranchCommand = vscode.commands.registerCommand(
         'gitWorkflowHelper.createBranch',
         async () => {
             try {
+                const workspaceRoot = await selectWorkspaceRoot();
+                const branchConfigManager = new BranchConfigManager();
+                const branchCreator = new BranchCreator(branchConfigManager, workspaceRoot);
                 await branchCreator.createBranch();
             } catch (error: any) {
-                const errorMessage = error?.message || String(error);
-                vscode.window.showErrorMessage(`创建分支失败: ${errorMessage}`);
+                handleCommandError('创建分支', error);
             }
         }
     );
@@ -31,15 +77,11 @@ export function activate(context: vscode.ExtensionContext) {
         'gitWorkflowHelper.mergeFeatureBranch',
         async () => {
             try {
-                if (!vscode.workspace.workspaceFolders?.length) {
-                    vscode.window.showErrorMessage('请先打开一个工作区文件夹');
-                    return;
-                }
-                const gitMergeService = new GitMergeService();
+                const workspaceRoot = await selectWorkspaceRoot();
+                const gitMergeService = new GitMergeService(workspaceRoot);
                 await gitMergeService.mergeFeatureBranch();
             } catch (error: any) {
-                const errorMessage = error?.message || '未知错误';
-                vscode.window.showErrorMessage(`合并失败: ${errorMessage}`);
+                handleCommandError('合并', error);
             }
         }
     );
@@ -49,15 +91,11 @@ export function activate(context: vscode.ExtensionContext) {
         'gitWorkflowHelper.manageConfiguration',
         async () => {
             try {
-                if (!vscode.workspace.workspaceFolders?.length) {
-                    vscode.window.showErrorMessage('请先打开一个工作区文件夹');
-                    return;
-                }
-                const gitMergeService = new GitMergeService();
+                const workspaceRoot = await selectWorkspaceRoot();
+                const gitMergeService = new GitMergeService(workspaceRoot);
                 await gitMergeService.manageConfiguration();
             } catch (error: any) {
-                const errorMessage = error?.message || '未知错误';
-                vscode.window.showErrorMessage(`配置失败: ${errorMessage}`);
+                handleCommandError('配置', error);
             }
         }
     );

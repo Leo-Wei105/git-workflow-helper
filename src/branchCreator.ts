@@ -9,18 +9,15 @@ import {
 import { BranchConfigManager } from "./branchConfigManager";
 import { BranchUtils } from "./branchUtils";
 import { GitOperations } from "./gitOperations";
+import { AppError, isUserCancelledError } from "./errors";
 
 export class BranchCreator {
   private configManager: BranchConfigManager;
   private gitOps: GitOperations;
 
-  constructor(configManager: BranchConfigManager) {
+  constructor(configManager: BranchConfigManager, workspaceRoot: string) {
     this.configManager = configManager;
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error("请先打开一个工作区");
-    }
-    this.gitOps = new GitOperations(workspaceFolder.uri.fsPath);
+    this.gitOps = new GitOperations(workspaceRoot);
   }
 
   /**
@@ -40,7 +37,10 @@ export class BranchCreator {
       }
       return username;
     } catch (error) {
-      throw new Error("获取Git用户名失败，请检查Git配置");
+      throw new AppError("获取Git用户名失败，请检查Git配置", "UNKNOWN", {
+        stage: "getGitUsername",
+        cause: error,
+      });
     }
   }
 
@@ -108,12 +108,11 @@ export class BranchCreator {
    * 检查分支是否存在
    */
   private async branchExists(branchName: string): Promise<boolean> {
-    try {
-      await this.gitOps.execGitCommand(`git rev-parse --verify ${branchName}`);
+    const localExists = await this.gitOps.checkLocalBranchExists(branchName);
+    if (localExists) {
       return true;
-    } catch {
-      return false;
     }
+    return await this.gitOps.checkRemoteBranchExists(branchName);
   }
 
   /**
@@ -135,16 +134,16 @@ export class BranchCreator {
 
     try {
       if (config.autoCheckout) {
-        await this.gitOps.execGitCommand(`git checkout -b ${branchName} ${baseBranch}`);
+        await this.gitOps.execGitArgs(["checkout", "-b", branchName, baseBranch]);
         vscode.window.showInformationMessage(`✓ 成功创建分支: ${branchName}`);
       } else {
-        await this.gitOps.execGitCommand(`git branch ${branchName} ${baseBranch}`);
+        await this.gitOps.execGitArgs(["branch", branchName, baseBranch]);
         vscode.window.showInformationMessage(`✓ 成功创建分支: ${branchName}`);
       }
 
       if (isRemoteBaseBranch) {
         try {
-          await this.gitOps.execGitCommand(`git branch --unset-upstream ${branchName}`);
+          await this.gitOps.execGitArgs(["branch", "--unset-upstream", branchName]);
         } catch {
           // 忽略错误
         }
@@ -396,7 +395,9 @@ export class BranchCreator {
       console.error("创建分支失败:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`创建分支失败: ${errorMessage}`);
+      if (!isUserCancelledError(error)) {
+        vscode.window.showErrorMessage(`创建分支失败: ${errorMessage}`);
+      }
       return { success: false, error: errorMessage };
     }
   }

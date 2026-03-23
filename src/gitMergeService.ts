@@ -3,9 +3,10 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { BranchConfigManager } from "./branchConfigManager";
 import { BranchManager } from "./branchManager";
-import { ConfigurationManager } from "./configurationManager";
 import { GitOperations } from "./gitOperations";
 import { MergeWorkflow } from "./mergeWorkflow";
+import { MergeTargetConfigManager } from "./mergeTargetConfigManager";
+import { AppError, isUserCancelledError, toAppError } from "./errors";
 
 /**
  * Git合并服务类
@@ -16,38 +17,34 @@ export class GitMergeService {
   private static isOperationInProgress = false;
   private gitOps: GitOperations;
   private branchManager: BranchManager;
-  private configManager: ConfigurationManager;
   private mergeWorkflow: MergeWorkflow;
   private branchConfigManager: BranchConfigManager;
+  private mergeTargetConfigManager: MergeTargetConfigManager;
 
-  constructor() {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-      throw new Error("请先打开一个工作区文件夹");
-    }
-
-    this.workspaceRoot = workspaceFolders[0].uri.fsPath;
+  constructor(workspaceRoot: string) {
+    this.workspaceRoot = workspaceRoot;
     
     const gitDir = path.join(this.workspaceRoot, ".git");
     if (!fs.existsSync(gitDir)) {
-      throw new Error("当前工作区不是Git仓库，请在Git项目中使用此插件");
+      throw new AppError(
+        "当前工作区不是Git仓库，请在Git项目中使用此插件",
+        "NOT_GIT_REPO",
+        { stage: "init" }
+      );
     }
 
     this.gitOps = new GitOperations(this.workspaceRoot);
     this.branchManager = new BranchManager(this.gitOps);
     this.branchConfigManager = new BranchConfigManager();
-
-    const config = vscode.workspace.getConfiguration("gitWorkflowHelper");
-    this.configManager = new ConfigurationManager(
-      config,
-      this.gitOps,
-      this.branchManager,
-      this.branchConfigManager
+    this.mergeTargetConfigManager = new MergeTargetConfigManager(
+      vscode.workspace.getConfiguration("gitWorkflowHelper")
     );
+
     this.mergeWorkflow = new MergeWorkflow(
       this.gitOps,
       this.branchManager,
-      this.configManager
+      this.branchConfigManager,
+      this.mergeTargetConfigManager
     );
   }
 
@@ -92,8 +89,13 @@ export class GitMergeService {
         }
       );
     } catch (error: any) {
-      const errorMessage = error?.message || "未知错误";
-      vscode.window.showErrorMessage(`合并失败: ${errorMessage}`);
+      const appError = toAppError(error, "未知错误");
+      if (isUserCancelledError(appError)) {
+        vscode.window.showInformationMessage(`已取消合并: ${appError.message}`);
+        return;
+      }
+      const stageText = appError.stage ? ` [${appError.stage}]` : "";
+      vscode.window.showErrorMessage(`合并失败${stageText}: ${appError.message}`);
     } finally {
       GitMergeService.isOperationInProgress = false;
     }

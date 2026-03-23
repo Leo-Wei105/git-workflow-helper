@@ -1,8 +1,10 @@
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import * as vscode from "vscode";
+import { AppError } from "./errors";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Git操作类 - 负责所有Git命令操作
@@ -31,7 +33,33 @@ export class GitOperations {
       return stdout.trim();
     } catch (error: any) {
       const errorMessage = error.stderr || error.message || "未知错误";
-      throw new Error(`Git命令执行失败: ${errorMessage}`);
+      throw AppError.gitFailed(`Git命令执行失败: ${errorMessage}`, "execGitCommand", error);
+    }
+  }
+
+  /**
+   * 使用参数数组执行Git命令，避免命令注入和转义问题
+   */
+  async execGitArgs(args: string[]): Promise<string> {
+    try {
+      const { stdout, stderr } = await execFileAsync("git", args, {
+        cwd: this.workspaceRoot,
+        encoding: "utf8",
+      });
+
+      if (stderr && !stderr.includes("warning")) {
+        console.warn("Git命令警告:", stderr);
+      }
+
+      return stdout.trim();
+    } catch (error: any) {
+      const errorMessage = error.stderr || error.message || "未知错误";
+      const renderedArgs = args.join(" ");
+      throw AppError.gitFailed(
+        `Git命令执行失败(git ${renderedArgs}): ${errorMessage}`,
+        "execGitArgs",
+        error
+      );
     }
   }
 
@@ -40,7 +68,7 @@ export class GitOperations {
    */
   async checkGitRepository(): Promise<boolean> {
     try {
-      await this.execGitCommand("git status");
+      await this.execGitArgs(["status"]);
       return true;
     } catch {
       return false;
@@ -51,14 +79,14 @@ export class GitOperations {
    * 获取当前分支名
    */
   async getCurrentBranch(): Promise<string> {
-    return await this.execGitCommand("git branch --show-current");
+    return await this.execGitArgs(["branch", "--show-current"]);
   }
 
   /**
    * 检查是否有未提交的更改
    */
   async checkUncommittedChanges(): Promise<boolean> {
-    const status = await this.execGitCommand("git status --porcelain");
+    const status = await this.execGitArgs(["status", "--porcelain"]);
     return status.length > 0;
   }
 
@@ -67,7 +95,7 @@ export class GitOperations {
    */
   async checkMergeConflicts(): Promise<boolean> {
     try {
-      const status = await this.execGitCommand("git status --porcelain");
+      const status = await this.execGitArgs(["status", "--porcelain"]);
       return status.split("\n").some((line) => {
         const statusCode = line.substring(0, 2);
         return ["UU", "AA", "DD", "AU", "UA", "DU", "UD"].includes(statusCode);
@@ -82,9 +110,11 @@ export class GitOperations {
    */
   async getConflictFiles(): Promise<string[]> {
     try {
-      const status = await this.execGitCommand(
-        "git diff --name-only --diff-filter=U"
-      );
+      const status = await this.execGitArgs([
+        "diff",
+        "--name-only",
+        "--diff-filter=U",
+      ]);
       return status ? status.split("\n").filter((file) => file.trim()) : [];
     } catch {
       return [];
@@ -96,9 +126,12 @@ export class GitOperations {
    */
   async checkRemoteBranchExists(branchName: string): Promise<boolean> {
     try {
-      const remoteBranch = await this.execGitCommand(
-        `git ls-remote --heads origin ${branchName}`
-      );
+      const remoteBranch = await this.execGitArgs([
+        "ls-remote",
+        "--heads",
+        "origin",
+        branchName,
+      ]);
       return !!remoteBranch;
     } catch {
       return false;
@@ -112,10 +145,10 @@ export class GitOperations {
     branchName: string,
     setUpstream: boolean = false
   ): Promise<void> {
-    const command = setUpstream
-      ? `git push -u origin ${branchName}`
-      : `git push origin ${branchName}`;
-    await this.execGitCommand(command);
+    const args = setUpstream
+      ? ["push", "-u", "origin", branchName]
+      : ["push", "origin", branchName];
+    await this.execGitArgs(args);
   }
 
   /**
@@ -123,7 +156,7 @@ export class GitOperations {
    */
   async checkLocalBranchExists(branchName: string): Promise<boolean> {
     try {
-      await this.execGitCommand(`git rev-parse --verify ${branchName}`);
+      await this.execGitArgs(["show-ref", "--verify", `refs/heads/${branchName}`]);
       return true;
     } catch {
       return false;
@@ -137,16 +170,21 @@ export class GitOperations {
     const localExists = await this.checkLocalBranchExists(branchName);
     
     if (localExists) {
-      await this.execGitCommand(`git checkout ${branchName}`);
+      await this.execGitArgs(["checkout", branchName]);
     } else {
       // 检查远程是否存在
       const remoteExists = await this.checkRemoteBranchExists(branchName);
       if (remoteExists) {
         // 从远程创建本地分支并切换
-        await this.execGitCommand(`git checkout -b ${branchName} origin/${branchName}`);
+        await this.execGitArgs([
+          "checkout",
+          "-b",
+          branchName,
+          `origin/${branchName}`,
+        ]);
       } else {
         // 如果本地和远程都不存在，尝试创建新分支
-        await this.execGitCommand(`git checkout -b ${branchName}`);
+        await this.execGitArgs(["checkout", "-b", branchName]);
       }
     }
   }
@@ -155,29 +193,29 @@ export class GitOperations {
    * 拉取远程分支
    */
   async pullBranch(branchName: string): Promise<void> {
-    await this.execGitCommand(`git pull origin ${branchName}`);
+    await this.execGitArgs(["pull", "origin", branchName]);
   }
 
   /**
    * 合并分支
    */
   async mergeBranch(sourceBranch: string): Promise<void> {
-    await this.execGitCommand(`git merge ${sourceBranch}`);
+    await this.execGitArgs(["merge", sourceBranch]);
   }
 
   /**
    * 提交更改
    */
   async commitChanges(message: string): Promise<void> {
-    await this.execGitCommand("git add .");
-    await this.execGitCommand(`git commit -m "${message}"`);
+    await this.execGitArgs(["add", "."]);
+    await this.execGitArgs(["commit", "-m", message]);
   }
 
   /**
    * 中止合并
    */
   async abortMerge(): Promise<void> {
-    await this.execGitCommand("git merge --abort");
+    await this.execGitArgs(["merge", "--abort"]);
   }
 
   /**
@@ -190,22 +228,28 @@ export class GitOperations {
         return;
       }
 
-      const upstream = await this.execGitCommand(
-        `git rev-parse --abbrev-ref ${branchName}@{upstream}`
-      ).catch(() => null);
+      const upstream = await this.execGitArgs([
+        "rev-parse",
+        "--abbrev-ref",
+        `${branchName}@{upstream}`,
+      ]).catch(() => null);
       
       if (upstream !== `origin/${branchName}`) {
-        await this.execGitCommand(
-          `git branch --set-upstream-to=origin/${branchName} ${branchName}`
-        );
+        await this.execGitArgs([
+          "branch",
+          `--set-upstream-to=origin/${branchName}`,
+          branchName,
+        ]);
       }
     } catch (error: any) {
       if (error.message?.includes("no upstream")) {
         const remoteExists = await this.checkRemoteBranchExists(branchName);
         if (remoteExists) {
-          await this.execGitCommand(
-            `git branch --set-upstream-to=origin/${branchName} ${branchName}`
-          );
+          await this.execGitArgs([
+            "branch",
+            `--set-upstream-to=origin/${branchName}`,
+            branchName,
+          ]);
         }
       }
     }

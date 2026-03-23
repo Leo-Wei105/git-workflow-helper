@@ -1,8 +1,10 @@
-import * as vscode from "vscode";
 import * as path from "path";
-import { GitOperations } from "./gitOperations";
+import * as vscode from "vscode";
+import { BranchConfigManager } from "./branchConfigManager";
 import { BranchManager } from "./branchManager";
-import { ConfigurationManager } from "./configurationManager";
+import { AppError } from "./errors";
+import { GitOperations } from "./gitOperations";
+import { MergeTargetConfigManager } from "./mergeTargetConfigManager";
 
 /**
  * 合并流程类 - 负责合并流程编排
@@ -10,16 +12,19 @@ import { ConfigurationManager } from "./configurationManager";
 export class MergeWorkflow {
   private gitOps: GitOperations;
   private branchManager: BranchManager;
-  private configManager: ConfigurationManager;
+  private branchConfigManager: BranchConfigManager;
+  private mergeTargetConfigManager: MergeTargetConfigManager;
 
   constructor(
     gitOps: GitOperations,
     branchManager: BranchManager,
-    configManager: ConfigurationManager
+    branchConfigManager: BranchConfigManager,
+    mergeTargetConfigManager: MergeTargetConfigManager
   ) {
     this.gitOps = gitOps;
     this.branchManager = branchManager;
-    this.configManager = configManager;
+    this.branchConfigManager = branchConfigManager;
+    this.mergeTargetConfigManager = mergeTargetConfigManager;
   }
 
   /**
@@ -67,10 +72,7 @@ export class MergeWorkflow {
    * 等待冲突解决
    */
   private async waitForConflictResolution(): Promise<boolean> {
-    const maxAttempts = 10;
-    let attempts = 0;
-
-    while (attempts < maxAttempts) {
+    while (true) {
       const hasConflicts = await this.gitOps.checkMergeConflicts();
       if (!hasConflicts) {
         const hasUnstagedChanges = await this.gitOps.checkUncommittedChanges();
@@ -99,12 +101,7 @@ export class MergeWorkflow {
         await this.gitOps.abortMerge();
         return false;
       }
-
-      attempts++;
     }
-
-    vscode.window.showErrorMessage("等待冲突解决超时");
-    return false;
   }
 
   /**
@@ -118,7 +115,9 @@ export class MergeWorkflow {
     }
     
     if (!(await this.gitOps.checkGitRepository())) {
-      throw new Error("当前目录不是有效的Git仓库");
+      throw new AppError("当前目录不是有效的Git仓库", "NOT_GIT_REPO", {
+        stage: "prepareMergeEnvironment",
+      });
     }
 
     if (progress) {
@@ -126,12 +125,16 @@ export class MergeWorkflow {
     }
     
     const currentBranch = await this.gitOps.getCurrentBranch();
-    const branchPrefixes = this.configManager.getBranchPrefixes();
+    const branchPrefixes = this.branchConfigManager.getBranchPrefixes();
     const isFeatureBranch = await this.branchManager.checkFeatureBranch(branchPrefixes);
 
     if (!isFeatureBranch) {
       const patterns = branchPrefixes.map(p => p.prefix).join(", ");
-      throw new Error(`当前分支不是功能分支。支持的分支前缀: ${patterns}`);
+      throw new AppError(
+        `当前分支不是功能分支。支持的分支前缀: ${patterns}`,
+        "UNKNOWN",
+        { stage: "prepareMergeEnvironment" }
+      );
     }
 
     if (progress) {
@@ -179,13 +182,13 @@ export class MergeWorkflow {
       });
 
       if (!commitMessage) {
-        throw new Error("未输入提交信息，操作已取消");
+        throw AppError.userCancelled("未输入提交信息，操作已取消");
       }
 
       await this.gitOps.commitChanges(`feat: ${commitMessage}`);
       await this.gitOps.pushBranch(currentBranch);
     } else {
-      throw new Error("请先提交或存储更改后再运行");
+      throw AppError.userCancelled("请先提交或存储更改后再运行");
     }
   }
 
@@ -193,7 +196,7 @@ export class MergeWorkflow {
    * 收集合并参数（选择目标分支）
    */
   async gatherMergeParameters(): Promise<string> {
-    const targetBranches = this.configManager.getTargetBranches();
+    const targetBranches = this.mergeTargetConfigManager.getTargetBranches();
     const targetBranchOptions = targetBranches.map((branch) => ({
       label: branch.name,
       value: branch.name,
@@ -204,7 +207,7 @@ export class MergeWorkflow {
     });
 
     if (!selected) {
-      throw new Error("未选择目标分支，操作已取消");
+      throw AppError.userCancelled("未选择目标分支，操作已取消");
     }
 
     return selected.value;
@@ -249,7 +252,9 @@ export class MergeWorkflow {
     );
 
     if (!success) {
-      throw new Error(`合并到 ${targetBranch} 分支失败`);
+      throw new AppError(`合并到 ${targetBranch} 分支失败`, "UNKNOWN", {
+        stage: "executeMainMergeFlow",
+      });
     }
     
     progress.report({ message: `推送合并结果到远程...`, increment: 20 });

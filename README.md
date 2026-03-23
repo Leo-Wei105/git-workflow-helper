@@ -50,11 +50,12 @@
 
 - **GitOperations**：Git 命令操作封装层，统一处理所有 Git 操作
 - **BranchManager**：分支管理和验证逻辑，处理分支相关的业务逻辑
-- **ConfigurationManager**：配置管理模块，处理目标分支等配置
-- **BranchConfigManager**：分支创建配置管理，处理分支前缀等配置
+- **BranchConfigManager**：分支创建配置管理，处理分支前缀、日期格式、用户名等命名配置
+- **MergeTargetConfigManager**：合并目标配置管理，处理可选目标分支（如 uat/pre）配置
 - **MergeWorkflow**：合并流程编排，控制合并的完整流程
 - **BranchCreator**：分支创建流程，处理分支创建的完整流程
 - **GitMergeService**：主服务类，协调各个模块完成功能
+- **AppError (errors.ts)**：统一错误模型，区分用户取消与系统异常并携带阶段信息
 
 ### 架构优势
 
@@ -277,7 +278,7 @@ hotfix/20250101/紧急修复支付异常_alex
 
 ## 📝 版本信息
 
-当前版本：**v0.0.1**
+当前版本：**v0.0.2**
 
 ### 主要功能
 - ✅ 快速创建标准化分支（支持自定义前缀、日期格式、用户名）
