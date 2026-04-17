@@ -196,9 +196,9 @@
   "devDependencies": {
     "@types/node": "^20.x",
     "@types/vscode": "^1.74.0",
-    "@vscode/vsce": "^2.32.0",
-    "typescript": "^5.8.3",
-    "rimraf": "^5.0.5"
+    "@vscode/vsce": "^3.9.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.8.3"
   },
   "keywords": [
     "git",
