@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { GitMergeService } from './gitMergeService';
-import { BranchCreator } from './branchCreator';
 import { BranchConfigManager } from './branchConfigManager';
+import { BranchCreator } from './branchCreator';
 import { AppError, isUserCancelledError, toAppError } from './errors';
+import { GitMergeService } from './gitMergeService';
 
 async function selectWorkspaceRoot(): Promise<string> {
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -91,9 +91,10 @@ export function activate(context: vscode.ExtensionContext) {
         'gitWorkflowHelper.manageConfiguration',
         async () => {
             try {
-                const workspaceRoot = await selectWorkspaceRoot();
-                const gitMergeService = new GitMergeService(workspaceRoot);
-                await gitMergeService.manageConfiguration();
+                await vscode.commands.executeCommand(
+                    'workbench.action.openSettings',
+                    '@ext:Leo-Wei105.git-workflow-helper'
+                );
             } catch (error: any) {
                 handleCommandError('配置', error);
             }
