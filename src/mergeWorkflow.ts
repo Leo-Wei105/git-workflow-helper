@@ -98,6 +98,7 @@ export class MergeWorkflow {
 
     const action = await vscode.window.showWarningMessage(
       `检测到 ${conflictFiles.length} 个文件存在合并冲突：\n${conflictFiles.join("\n")}`,
+      { modal: true },
       "打开冲突文件",
       "中止合并",
       "手动解决后继续"
@@ -131,6 +132,7 @@ export class MergeWorkflow {
         if (hasUnstagedChanges) {
           const shouldCommit = await vscode.window.showInformationMessage(
             "冲突已解决，是否提交合并结果？",
+            { modal: true },
             "提交",
             "取消"
           );
@@ -146,6 +148,7 @@ export class MergeWorkflow {
 
       const continueWaiting = await vscode.window.showInformationMessage(
         "仍有未解决的冲突，请继续解决...",
+        { modal: true },
         "重新检查",
         "中止合并"
       );
